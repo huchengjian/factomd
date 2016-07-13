@@ -86,11 +86,13 @@ type State struct {
 	ShutdownChan           chan int // For gracefully halting Factom
 	JournalFile            string
 
-	serverPrivKey primitives.PrivateKey
-	serverPubKey  primitives.PublicKey
+	serverPrivKey         primitives.PrivateKey
+	serverPubKey          primitives.PublicKey
+	serverPendingPrivKeys []primitives.PrivateKey
+	serverPendingPubKeys  []primitives.PublicKey
 
 	// Server State
-	StartDelay    interfaces.Timestamp
+	StartDelay    int64 // Time in Milliseconds since the last DBState was applied
 	RunLeader     bool
 	LLeaderHeight uint32
 	Leader        bool
@@ -112,6 +114,9 @@ type State struct {
 	DBSigLimit     int
 	DBSigProcessed int // Number of DBSignatures received and processed.
 	DBSigDone      bool
+	KeepMismatch   bool // By default, this is false, which means DBstates are discarded
+	//when a majority of leaders disagree with the hash we have via DBSigs
+	MismatchCnt int // Keep track of how many blockhash mismatches we've had to correct
 
 	Saving  bool // True if we are in the process of saving to the database
 	Syncing bool // Looking for messages from leaders to sync
@@ -338,7 +343,7 @@ func (s *State) LoadConfig(filename string, folder string) {
 
 func (s *State) Init() {
 
-	s.StartDelay = s.GetTimestamp() // We cant start as a leader until we know we are upto date
+	s.StartDelay = s.GetTimestamp().GetTimeMilli() // We cant start as a leader until we know we are upto date
 	s.RunLeader = false
 
 	wsapi.InitLogs(s.LogPath+s.FactomNodeName+".log", s.LogLevel)
@@ -458,7 +463,7 @@ func (s *State) Init() {
 
 	s.initServerKeys()
 	s.AuthorityServerCount = 0
-	LoadIdentityCache(s)
+	//LoadIdentityCache(s)
 	//StubIdentityCache(s)
 
 	s.starttime = time.Now()
@@ -735,7 +740,7 @@ func (s *State) UpdateState() (progress bool) {
 	if dbheight == 0 {
 		dbheight++
 	}
-	if plbase <= dbheight {
+	if plbase <= dbheight && s.RunLeader {
 		progress = s.ProcessLists.UpdateState(dbheight)
 	}
 
@@ -746,9 +751,6 @@ func (s *State) UpdateState() (progress bool) {
 
 	s.SetString()
 
-	if s.DebugConsensus {
-		fmt.Printf("dddd %20s %10s --- %10s %10v\n", "Update State:>>>>", s.FactomNodeName, "progress:", progress)
-	}
 	return
 }
 
@@ -781,6 +783,10 @@ func (s *State) catchupEBlocks() {
 
 func (s *State) AddFedServer(dbheight uint32, hash interfaces.IHash) int {
 	return s.ProcessLists.Get(dbheight).AddFedServer(hash)
+}
+
+func (s *State) RemoveFedServer(dbheight uint32, hash interfaces.IHash) {
+	s.ProcessLists.Get(dbheight).RemoveFedServerHash(hash)
 }
 
 func (s *State) AddAuditServer(dbheight uint32, hash interfaces.IHash) int {
@@ -850,7 +856,8 @@ func (s *State) initServerKeys() {
 	if err != nil {
 		//panic("Cannot parse Server Private Key from configuration file: " + err.Error())
 	}
-	s.serverPubKey = primitives.PubKeyFromString(constants.SERVER_PUB_KEY)
+	s.serverPubKey = *(s.serverPrivKey.Pub)
+	//s.serverPubKey = primitives.PubKeyFromString(constants.SERVER_PUB_KEY)
 }
 
 func (s *State) LogInfo(args ...interface{}) {
@@ -1042,7 +1049,6 @@ func (s *State) SetString() {
 	}
 	s.Status = false
 
-	// fmt.Println("dddd  SetString::::::", s.FactomNodeName, "LeaderMinute", s.LeaderMinute)
 	vmi := -1
 	if s.Leader && s.LeaderVMIndex >= 0 {
 		vmi = s.LeaderVMIndex
@@ -1111,7 +1117,7 @@ func (s *State) SetString() {
 
 	str := fmt.Sprintf("%8s[%6x]%4s %4s ",
 		s.FactomNodeName,
-		s.IdentityChainID.Bytes()[:3],
+		s.IdentityChainID.Bytes()[:4],
 		vmIndex,
 		stype)
 
@@ -1121,10 +1127,10 @@ func (s *State) SetString() {
 		s.ProcessLists.DBHeightBase,
 		int(s.ProcessLists.DBHeightBase)+len(s.ProcessLists.Lists)-1)
 
-	str = str + fmt.Sprintf("VMMin: %2v CMin %2v DBHT %v DBStateCnt %5d MissingCnt %5d ",
+	str = str + fmt.Sprintf("VMMin: %2v CMin %2v MismatchCnt %v DBStateCnt %5d MissingCnt %5d ",
 		lmin,
 		s.CurrentMinute,
-		s.LLeaderHeight,
+		s.MismatchCnt,
 		s.DBStateCnt,
 		s.MissingCnt)
 
@@ -1218,4 +1224,9 @@ func (s *State) ProcessInvalidMsgQueue() {
 			s.InvalidMessages[msg.GetHash().Fixed()] = msg
 		}
 	}
+}
+
+func (s *State) SetPendingSigningKey(p primitives.PrivateKey) {
+	s.serverPendingPrivKeys = append(s.serverPendingPrivKeys, p)
+	s.serverPendingPubKeys = append(s.serverPendingPubKeys, *(p.Pub))
 }

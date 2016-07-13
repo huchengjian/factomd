@@ -29,8 +29,8 @@ var _ = (*hash.Hash32)(nil)
 func (s *State) Process() (progress bool) {
 
 	if !s.RunLeader {
-		now := s.GetTimestamp() // Timestamps are in milliseconds, so wait 20
-		if now.GetTimeMilli()-s.StartDelay.GetTimeMilli() > 5*1000 {
+		now := s.GetTimestamp().GetTimeMilli() // Timestamps are in milliseconds, so wait 20
+		if now-s.StartDelay > 10*1000 {
 			s.RunLeader = true
 		}
 		s.LeaderPL = s.ProcessLists.Get(s.LLeaderHeight)
@@ -53,7 +53,8 @@ func (s *State) Process() (progress bool) {
 
 		switch msg.Validate(s) {
 		case 1:
-			if s.Leader &&
+			if s.RunLeader &&
+				s.Leader &&
 				!s.Saving &&
 				int(vm.Height) == len(vm.List) &&
 				(!s.Syncing || !vm.Synced) &&
@@ -166,6 +167,7 @@ func (s *State) AddDBState(isNew bool,
 		s.CurrentMinute = 0
 		s.EOMProcessed = 0
 		s.DBSigProcessed = 0
+		s.StartDelay = s.GetTimestamp().GetTimeMilli()
 	}
 	if ht == 0 && s.LLeaderHeight < 1 {
 		s.LLeaderHeight = 1
@@ -383,11 +385,34 @@ func (s *State) ProcessAddServer(dbheight uint32, addServerMsg interfaces.IMsg) 
 		return true
 	}
 
-	if as.ServerType == 0 {
-		s.LeaderPL.AdminBlock.AddFedServer(as.ServerChainID)
-	} else if as.ServerType == 1 {
-		s.LeaderPL.AdminBlock.AddAuditServer(as.ServerChainID)
+	if !ProcessIdentityToAdminBlock(s, as.ServerChainID, as.ServerType) {
+		fmt.Printf("dddd %s %s\n", s.FactomNodeName, "Addserver message did not add to admin block.")
+		return true
 	}
+	return true
+}
+
+func (s *State) ProcessRemoveServer(dbheight uint32, removeServerMsg interfaces.IMsg) bool {
+	rs, ok := removeServerMsg.(*messages.RemoveServerMsg)
+	if !ok {
+		return true
+	}
+
+	if !s.VerifyIsAuthority(rs.ServerChainID) {
+		fmt.Printf("dddd %s %s\n", s.FactomNodeName, "RemoveServer message did not add to admin block.")
+		return true
+	}
+
+	if s.GetAuthorityServerType(rs.ServerChainID) != rs.ServerType {
+		fmt.Printf("dddd %s %s\n", s.FactomNodeName, "RemoveServer message did not add to admin block. Servertype of message did not match authority's")
+		return true
+	}
+
+	if len(s.LeaderPL.FedServers) < 2 {
+		fmt.Printf("dddd %s %s\n", s.FactomNodeName, "RemoveServer message did not add to admin block. Only 1 federated server exists.")
+		return true
+	}
+	s.LeaderPL.AdminBlock.RemoveFederatedServer(rs.ServerChainID)
 
 	return true
 }
@@ -398,21 +423,21 @@ func (s *State) ProcessChangeServerKey(dbheight uint32, changeServerKeyMsg inter
 		return true
 	}
 
-	// TODO: Signiture && Checking
+	if !s.VerifyIsAuthority(ask.IdentityChainID) {
+		fmt.Printf("dddd %s %s\n", s.FactomNodeName, "ChangeServerKey message did not add to admin block.")
+		return true
+	}
 
 	//fmt.Printf("DEBUG: Processed: %x", ask.AdminBlockChange)
 	switch ask.AdminBlockChange {
 	case constants.TYPE_ADD_BTC_ANCHOR_KEY:
 		var btcKey [20]byte
 		copy(btcKey[:], ask.Key.Bytes()[:20])
-		fmt.Println("Add BTC to admin block")
 		s.LeaderPL.AdminBlock.AddFederatedServerBitcoinAnchorKey(ask.IdentityChainID, ask.KeyPriority, ask.KeyType, &btcKey)
 	case constants.TYPE_ADD_FED_SERVER_KEY:
 		pub := ask.Key.Fixed()
-		fmt.Println("Add Block Key to admin block : " + s.IdentityChainID.String())
 		s.LeaderPL.AdminBlock.AddFederatedServerSigningKey(ask.IdentityChainID, &pub)
 	case constants.TYPE_ADD_MATRYOSHKA:
-		fmt.Println("Add MHash to admin block")
 		s.LeaderPL.AdminBlock.AddMatryoshkaHash(ask.IdentityChainID, ask.Key)
 	}
 	return true
@@ -657,12 +682,17 @@ func (s *State) ProcessDBSig(dbheight uint32, msg interfaces.IMsg) bool {
 		for _, vm := range pl.VMs {
 			vm.Synced = false
 		}
+		pl.ResetDiffSigTally()
 	}
 
 	// Put the stuff that executes per DBSignature here
 	if !dbs.Processed {
 		if dbs.VMIndex == 0 {
 			s.SetLeaderTimestamp(dbs.GetTimestamp())
+		}
+		if !dbs.DirectoryBlockKeyMR.IsSameAs(s.GetDBState(dbheight - 1).DirectoryBlock.GetKeyMR()) {
+			fmt.Println(s.FactomNodeName, "JUST COMPARED", dbs.DirectoryBlockKeyMR.String()[:10], " : ", s.GetDBState(dbheight - 1).DirectoryBlock.GetKeyMR().String()[:10])
+			pl.IncrementDiffSigTally()
 		}
 		dbs.Processed = true
 		s.DBSigProcessed++
@@ -676,10 +706,15 @@ func (s *State) ProcessDBSig(dbheight uint32, msg interfaces.IMsg) bool {
 		// TODO: check signatures here.  Count what match and what don't.  Then if a majority
 		// disagree with us, null our entry out.  Otherwise toss our DBState and ask for one from
 		// our neighbors.
-
-		if !dbstate.Saved {
-			dbstate.ReadyToSave = true
-			s.DBStates.SaveDBStateToDB(dbstate)
+		if s.KeepMismatch || pl.CheckDiffSigTally() {
+			if !dbstate.Saved {
+				dbstate.ReadyToSave = true
+				s.DBStates.SaveDBStateToDB(dbstate)
+			}
+		} else {
+			//fmt.Println(s.FactomNodeName, "JUST DISCARDED:", dbstate.DirectoryBlock.GetKeyMR().String()[:10])
+			s.MismatchCnt++
+			s.DBStates.Catchup()
 		}
 		s.ReviewHolding()
 		s.Saving = false
