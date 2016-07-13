@@ -253,7 +253,13 @@ func (fs *FactoidState) ProcessEndOfBlock(state interfaces.IState) {
 			}
 		}
 	}
+
+	// Promote the currently scheduled next FER
+	fs.State.ProcessRecentFERChainEntries()
+
 	fs.DBHeight++
+
+	
 }
 
 // Returns an error message about what is wrong with the transaction if it is

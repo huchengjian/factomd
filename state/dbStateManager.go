@@ -246,11 +246,6 @@ func (list *DBStateList) FixupLinks(p *DBState, d *DBState) (progress bool) {
 
 	pl := list.State.ProcessLists.Get(d.DirectoryBlock.GetHeader().GetDBHeight())
 
-	//for _, eb := range pl.NewEBlocks {
-	//	eb.BuildHeader()
-	//	eb.BodyKeyMR()
-	//	eb.KeyMR()
-	//}
 
 	for _, eb := range pl.NewEBlocks {
 		key, err := eb.KeyMR()
@@ -269,6 +264,9 @@ func (list *DBStateList) FixupLinks(p *DBState, d *DBState) (progress bool) {
 }
 
 func (list *DBStateList) ProcessBlocks(d *DBState) (progress bool) {
+	// Promote the currently scheduled next FER
+	list.State.ProcessRecentFERChainEntries()
+
 	if d.Locked {
 		return
 	}
@@ -284,8 +282,7 @@ func (list *DBStateList) ProcessBlocks(d *DBState) (progress bool) {
 	fs.AddECBlock(d.EntryCreditBlock)
 	fs.ProcessEndOfBlock(list.State)
 
-	// Promote the currently scheduled next FER
-	list.State.ProcessRecentFERChainEntries()
+
 
 	// Step my counter of Complete blocks
 	i := d.DirectoryBlock.GetHeader().GetDBHeight() - list.Base

@@ -15,6 +15,9 @@ import (
 // Go through the factoid exchange rate chain and determine if an FER change should be scheduled
 func (this *State) ProcessRecentFERChainEntries() {
 	// Find the FER entry chain
+
+
+
 	FERChainHash, err := primitives.HexToHash(this.FERChainId)
 	if err != nil {
 		this.Println("The FERChainId couldn't be turned into a IHASH")
@@ -29,7 +32,7 @@ func (this *State) ProcessRecentFERChainEntries() {
 	}
 	if entryBlock == nil {
 		this.Println("FER Chain head found to be nil")
-		return
+	return
 	}
 
 	this.Println("Checking last e block of FER chain with height of: ", entryBlock.GetHeader().GetDBHeight())
@@ -43,6 +46,7 @@ func (this *State) ProcessRecentFERChainEntries() {
 
 	// Check to see if a price change targets the next block
 	if this.FERChangeHeight == (this.GetDBHeightComplete() + 1) {
+
 		this.FactoshisPerEC = this.FERChangePrice
 		this.FERChangePrice = 100000000
 		this.FERChangeHeight = 0
@@ -58,7 +62,7 @@ func (this *State) ProcessRecentFERChainEntries() {
 	}
 
 	// Check last entry block method
-	if entryBlock.GetHeader().GetDBHeight() == this.GetDBHeightComplete() {
+	if entryBlock.GetHeader().GetDBHeight() == this.GetDBHeightComplete() - 1 {
 		entryHashes := entryBlock.GetEntryHashes()
 
 		// this.Println("Found FER entry hashes in a block as: ", entryHashes)
@@ -94,11 +98,10 @@ func (this *State) ProcessRecentFERChainEntries() {
 			}
 
 			entryContent := anEntry.GetContent()
-			// this.Println("Found content of an FER entry is:  ", string(entryContent))
 			ferEntry := new(specialEntries.FEREntry)
 			err = ferEntry.UnmarshalBinary(entryContent)
 			if err != nil {
-				this.Println("A FEREntry messgae didn't unmarshall correctly: ", err)
+				this.Println("A FEREntry message didn't unmarshall correctly: ", err)
 				continue
 			}
 
@@ -106,7 +109,7 @@ func (this *State) ProcessRecentFERChainEntries() {
 			ferEntry.SetResidentHeight(this.GetDBHeightComplete())
 
 			if (this.FerEntryIsValid(ferEntry)) && (ferEntry.Priority > this.FERPriority) {
-				fmt.Println(" Processing FER entry : ", string(entryContent))
+				this.Println(" Processing FER entry : ", string(entryContent))
 				this.FERPriority = ferEntry.GetPriority()
 				this.FERPrioritySetHeight = this.GetDBHeightComplete()
 				this.FERChangePrice = ferEntry.GetTargetPrice()
@@ -117,7 +120,7 @@ func (this *State) ProcessRecentFERChainEntries() {
 					this.FERChangeHeight = this.GetDBHeightComplete() + 2
 				}
 			} else {
-				fmt.Println(" Failed FER entry : ", string(entryContent))
+				this.Println(" Failed FER entry : ", string(entryContent))
 			}
 		}
 	}
