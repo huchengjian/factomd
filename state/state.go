@@ -939,7 +939,7 @@ func (s *State) catchupEBlocks() {
 								v.dbheight = eblock.GetHeader().GetDBHeight()
 								v.entryhash = entryhash
 								v.ebhash = ebKeyMR
-								fmt.Println("JUSTIN", s.FactomNodeName, "FROM EB APP2 ", entryhash.String())
+								//fmt.Println("JUSTIN", s.FactomNodeName, "FROM EB APP2 ", entryhash.String())
 
 								s.MissingEntries = append(s.MissingEntries, v)
 							}
