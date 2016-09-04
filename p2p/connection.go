@@ -159,11 +159,12 @@ func (c *Connection) commonInit(peer Peer) {
 	c.ReceiveChannel = make(chan interface{}, StandardChannelSize)
 	c.metrics = ConnectionMetrics{MomentConnected: time.Now()}
 	c.timeLastMetrics = time.Now()
-	c.timeLastAttempt = time.Now()
+	c.timeLastAttempt = time.Now().Add( -1 * TimeBetweenRedials)
 	c.timeLastStatus = time.Now()
 }
 
 func (c *Connection) Start() {
+	fmt.Printf("started network connection runloop\n")
 	go c.runLoop()
 }
 
@@ -177,15 +178,19 @@ func (c *Connection) runLoop() {
 		c.connectionStatusReport()
 		switch c.state {
 		case ConnectionInitialized:
+			fmt.Printf("                    in state initialized\n")
 			if MinumumQualityScore > c.peer.QualityScore && !c.isPersistent {
 				c.setNotes("Connection.runloop(%s) ConnectionInitialized quality score too low: %d", c.peer.PeerIdent(), c.peer.QualityScore)
 				c.updatePeer() // every PeerSaveInterval * 0.90 we send an update peer to the controller.
 				c.goShutdown()
 			} else {
 				c.setNotes("Connection.runLoop() ConnectionInitialized, going dialLoop(). %+v", c.peer.PeerIdent())
+				fmt.Printf("                    start dial loop\n")
 				c.dialLoop() // dialLoop dials until it connects or shuts down.
+				fmt.Printf("                    finish dial loop\n")
 			}
 		case ConnectionOnline:
+			fmt.Printf("                       in state online\n")
 			c.processSends()
 			c.processReceives() // We may get messages that change state (Eg: loopback error)
 			if ConnectionOnline == c.state {
@@ -201,6 +206,7 @@ func (c *Connection) runLoop() {
 				c.goShutdown()
 			}
 		case ConnectionOffline:
+			fmt.Printf("                    in state offline\n")
 			switch {
 			case c.isOutGoing:
 				note(c.peer.PeerIdent(), "Connection.runLoop() ConnectionOffline, going dialLoop().")
@@ -209,6 +215,7 @@ func (c *Connection) runLoop() {
 				c.goShutdown()
 			}
 		case ConnectionShuttingDown:
+			fmt.Printf("                    in state shutting down\n")
 			note(c.peer.PeerIdent(), "runLoop() in ConnectionShuttingDown state. The runloop() is sending ConnectionCommand{command: ConnectionIsClosed} Notes: %s", c.notes)
 			c.state = ConnectionClosed
 			BlockFreeChannelSend(c.ReceiveChannel, ConnectionCommand{command: ConnectionIsClosed})
@@ -282,7 +289,6 @@ func (c *Connection) dialLoop() {
 func (c *Connection) dial() bool {
 	address := c.peer.AddressPort()
 	note(c.peer.PeerIdent(), "Connection.dial() dialing: %+v", address)
-	// conn, err := net.Dial("tcp", c.peer.Address)
 	conn, err := net.DialTimeout("tcp", address, time.Second*10)
 	if nil != err {
 		c.setNotes(fmt.Sprintf("Connection.dial(%s) got error: %+v", address, err))
@@ -334,8 +340,11 @@ func (c *Connection) goShutdown() {
 // processSends gets all the messages from the application and sends them out over the network
 func (c *Connection) processSends() {
 	// note(c.peer.PeerIdent(), "Connection.processSends() called. Items in send channel: %d State: %s", len(c.SendChannel), c.ConnectionState())
+	fmt.Printf("                          process sends start\n")
 	for 0 < len(c.SendChannel) && ConnectionOnline == c.state {
 		message := <-c.SendChannel
+		fmt.Printf("                          process sends %+v\n", message)
+		fmt.Printf("                          process sendsx %x\n", message)
 		switch message.(type) {
 		case ConnectionParcel:
 			verbose(c.peer.PeerIdent(), "processSends() ConnectionParcel")
@@ -383,6 +392,7 @@ func (c *Connection) sendParcel(parcel Parcel) {
 	parcel.Header.NodeID = NodeID // Send it out with our ID for loopback.
 	verbose(c.peer.PeerIdent(), "sendParcel() Sanity check. State: %s Encoder: %+v, Parcel: %s", c.ConnectionState(), c.encoder, parcel.MessageType())
 	c.conn.SetWriteDeadline(time.Now().Add(1000 * time.Millisecond))
+	fmt.Printf("                                  sent to network %d   %s\n", parcel.Header.Length  , parcel.MessageType())
 	err := c.encoder.Encode(parcel)
 	switch {
 	case nil == err:

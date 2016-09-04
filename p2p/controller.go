@@ -145,6 +145,7 @@ func (c *Controller) StartNetwork() {
 	// Dial out to peers
 	c.fillOutgoingSlots()
 	// Start the runloop
+	fmt.Printf("started network controller runloop\n")
 	go c.runloop()
 }
 
@@ -300,7 +301,9 @@ func (c *Controller) runloop() {
 	for c.keepRunning { // Run until we get the exit command
 		dot("@@1\n")
 		progress := false
+		
 		for 0 < len(c.commandChannel) {
+			fmt.Printf("command channel is %d deep\n", len(c.commandChannel))
 			command := <-c.commandChannel
 			c.handleCommand(command)
 			progress = true
@@ -310,10 +313,14 @@ func (c *Controller) runloop() {
 		}
 		dot("@@3\n")
 		// route messages to and from application
+		
 		c.route() // Route messages
+		
 		dot("@@4\n")
 		// Manage peers
+		
 		c.managePeers()
+		
 		dot("@@5\n")
 		if CurrentLoggingLevel > 0 {
 			dot("@@6\n")
@@ -339,6 +346,7 @@ func (c *Controller) route() {
 		dot("&&b\n")
 		note(peerHash, "ctrlr.route() size of recieve channel: %d", len(connection.ReceiveChannel))
 		for 0 < len(connection.ReceiveChannel) { // effectively "While there are messages"
+			//fmt.Printf("got a message in the in  channel\n")
 			dot("&&c\n")
 			message := <-connection.ReceiveChannel
 			dot("&&d\n")
@@ -359,20 +367,25 @@ func (c *Controller) route() {
 	// significant("ctrlr", "Controller.route() size of ToNetwork channel: %d", len(c.ToNetwork))
 	dot("&&e\n")
 	for 0 < len(c.ToNetwork) { // effectively "While there are messages"
+		fmt.Printf("got a message in the out channel\n")
 		dot("&&f\n")
 		message := <-c.ToNetwork
+		fmt.Printf("pulled from out channel channel\n")
 		dot("&&g\n")
 		parcel := message.(Parcel)
 		TotalMessagesSent++
 		note("ctrlr", "Controller.route() got parcel from APPLICATION %+v", parcel.Header)
 		if "" != parcel.Header.TargetPeer { // directed send
+			fmt.Printf("message is directed send\n")
 			dot("&&h\n")
 			connection, present := c.connections[parcel.Header.TargetPeer]
 			if present { // We're still connected to the target
 				significant("ctrlr", "Controller.route() SUCCESS Directed send to %+v", parcel.Header.TargetPeer)
 				dot("&&i\n")
+				fmt.Printf("start send of message\n")
 				BlockFreeChannelSend(connection.SendChannel, ConnectionParcel{parcel: parcel})
 			} else {
+				fmt.Printf("error not connected\n")
 				significant("ctrlr", "Controller.route() FAILED! Target not present in connections! Directed send to %+v", parcel.Header.TargetPeer)
 				for key, _ := range c.connections {
 					significant("ctrlr", "Controller.route() %+v", key)
@@ -381,7 +394,9 @@ func (c *Controller) route() {
 		} else { // broadcast
 			dot("&&j\n")
 			note("ctrlr", "Controller.route() Broadcast send to %d peers", len(c.connections))
+			fmt.Printf("message is broadcast\n")
 			for _, connection := range c.connections {
+				fmt.Printf("Controller.route() Send to peer %s \n", connection.peer.Hash)
 				dot("&&k\n")
 				verbose("ctrlr", "Controller.route() Send to peer %s ", connection.peer.Hash)
 				BlockFreeChannelSend(connection.SendChannel, ConnectionParcel{parcel: parcel})
@@ -448,6 +463,7 @@ func (c *Controller) handleCommand(command interface{}) {
 		parameters := command.(CommandDialPeer)
 		conn := new(Connection).Init(parameters.peer, parameters.persistent)
 		connection := *conn
+		fmt.Printf("command dial peer start\n")
 		connection.Start()
 		c.connections[connection.peer.Hash] = connection
 		c.connectionsByAddress[connection.peer.Address] = connection
@@ -462,6 +478,7 @@ func (c *Controller) handleCommand(command interface{}) {
 		peer := new(Peer).Init(addPort[0], addPort[1], 0, RegularPeer, 0)
 		peer.Source["Accept()"] = time.Now()
 		connection := new(Connection).InitWithConn(conn, *peer)
+		fmt.Printf("command add peer start\n")
 		connection.Start()
 		c.connections[connection.peer.Hash] = *connection
 		c.connectionsByAddress[connection.peer.Address] = *connection

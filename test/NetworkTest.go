@@ -115,6 +115,8 @@ func main() {
 			bounce := new(messages.Bounce)
 			bounce.Name = name
 			bounce.Timestamp = primitives.NewTimestampNow()
+			//bounce.SetOrigin(1)
+			//bounce.SetPeer2Peer(true)
 			p2pProxy.Send(bounce)
 			now := primitives.NewTimestampNow()
 			timetosend = now.GetTimeMilli()-bounce.Timestamp.GetTimeMilli()

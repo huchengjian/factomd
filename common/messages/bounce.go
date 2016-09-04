@@ -196,8 +196,10 @@ func (m *Bounce) String() string {
 		last = ts.GetTimeMilli()
 //		str = fmt.Sprintf("%sbbbb %30s %4d.%03d seconds\n", str, ts.String(), elapse/1000, elapse%1000)
 	}
-	avg := sum/int64(len(m.Stamps))
-	str = str + fmt.Sprintf("Last Hop Took %d.%03d Average Hop: %d.%03d\n",elapse/1000,elapse%1000,avg/1000,avg%1000)
+	if len(m.Stamps) > 0 {
+		avg := sum/int64(len(m.Stamps))
+		str = str + fmt.Sprintf("Last Hop Took %d.%03d Average Hop: %d.%03d\n",elapse/1000,elapse%1000,avg/1000,avg%1000)
+	}
 	return str
 }
 
