@@ -12,6 +12,7 @@ import (
 	"net"
 	"syscall"
 	"time"
+	
 )
 
 // Connection represents a single connection to another peer over the network. It communicates with the application
@@ -42,24 +43,26 @@ type middle struct {
 	conn net.Conn
 }
 func (m *middle)Write(b []byte)(int,error){
-	fmt.Printf("bbbb Write %s\n",time.Now().String())
+	timestart := time.Now()
+	fmt.Printf("bbbb Write %s\n",timestart.String())
 	end := 1000
 	if end > len(b) {
 		end = len(b)
 	}
 	i,e := m.conn.Write(b)
-	fmt.Printf("bbbb Write %s %d/%d bytes, Data:%x\n",time.Now().String(),len(b),i,b[:end])
+	fmt.Printf("bbbb Write %s %d/%d bytes, Data:%x\n",(time.Since(timestart)).String(),len(b),i,b[:end])
 	return i,e
 }
 func (m *middle)Read(b[]byte)(int,error) {
-	fmt.Printf("bbbb Read  %s\n", time.Now().String())
+	timestart := time.Now()
+	fmt.Printf("bbbb Read  %s\n", timestart.String())
 	i,e := m.conn.Read(b)
 	end := 1000
 	if end > len(b) {
 		end = len(b)
 	}
 	if e == nil {
-		fmt.Printf("bbbb Read  %s %d bytes, Data: %x\n", time.Now().String(), len(b), b[:end])
+		fmt.Printf("bbbb Read  %s %d bytes, Data: %x\n", (time.Since(timestart)).String(), len(b), b[:end])
 	}
 	return i,e
 }

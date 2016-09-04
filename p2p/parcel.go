@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"hash/crc32"
 	"strconv"
-	"github.com/FactomProject/factomd/common/interfaces"
-	"encoding/binary"
-	"github.com/FactomProject/factomd/common/primitives"
+	//"github.com/FactomProject/factomd/common/interfaces"
+	//"encoding/binary"
+	//"github.com/FactomProject/factomd/common/primitives"
 )
 
 // Parcel is the atomic level of communication for the p2p network.  It contains within it the necessary info for
@@ -36,6 +36,7 @@ type ParcelHeader struct {
 	PeerPort    string 	      // port of the peer , or we are listening on
 }
 
+/*
 var _ interfaces.BinaryMarshallable = (*Parcel)(nil)
 
 func (p *Parcel) MarshalBinary() ([]byte,error) {
@@ -99,6 +100,7 @@ func (p *Parcel) UnmarshalBinaryData(Data []byte) (newData[]byte, err error){
 
 	return
 }
+*/
 
 type ParcelCommandType uint16
 
