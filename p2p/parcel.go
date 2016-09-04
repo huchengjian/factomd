@@ -29,7 +29,6 @@ type ParcelHeader struct {
 	Version     uint16            // 2 bytes - the version of the protocol we are running.
 	Type        ParcelCommandType // 2 bytes - network level commands (eg: ping/pong)
 	Length      uint32            // 4 bytes - length of the payload (that follows this header) in bytes
-	TargetPeer  string            // ? bytes - "" or nil for broadcast, otherwise the destination peer's hash.
 	Crc32       uint32            // 4 bytes - data integrity hash (of the payload itself.)
 	NodeID      uint64
 	TargetPeer  string            // ? bytes - "" or nil for broadcast, otherwise the destination peer's hash.
