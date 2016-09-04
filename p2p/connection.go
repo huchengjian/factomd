@@ -42,6 +42,7 @@ type middle struct {
 	conn net.Conn
 }
 func (m *middle)Write(b []byte)(int,error){
+	fmt.Printf("bbbb Write %s\n",time.Now().String())
 	end := 1000
 	if end > len(b) {
 		end = len(b)
@@ -51,6 +52,7 @@ func (m *middle)Write(b []byte)(int,error){
 	return i,e
 }
 func (m *middle)Read(b[]byte)(int,error) {
+	fmt.Printf("bbbb Read  %s\n", time.Now().String())
 	i,e := m.conn.Read(b)
 	end := 1000
 	if end > len(b) {
