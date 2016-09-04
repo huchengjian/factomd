@@ -13,6 +13,8 @@ import (
 	"github.com/FactomProject/factomd/common/constants"
 	"github.com/FactomProject/factomd/common/interfaces"
 	"github.com/FactomProject/factomd/common/primitives"
+	"time"
+	"strings"
 )
 
 type Bounce struct {
@@ -186,7 +188,7 @@ func (m *Bounce) MarshalBinary() (data []byte, err error) {
 }
 
 func (m *Bounce) String() string {
-	str := fmt.Sprintf("\nbbbb Origin: %32s Bounce Start:  %30s Hops: %5d Size: %5d ", m.Name, m.Timestamp.String(),len(m.Stamps),m.SizeOf())
+	str := fmt.Sprintf("\nbbbb Origin: %s %s Bounce Start:  %30s Hops: %5d Size: %5d ", time.Now().String(), strings.TrimSpace(m.Name), m.Timestamp.String(),len(m.Stamps),m.SizeOf())
 	last := m.Timestamp.GetTimeMilli()
 	elapse := int64(0)
 	sum := elapse

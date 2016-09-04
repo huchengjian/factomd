@@ -18,9 +18,9 @@ import (
 // via two channels, send and recieve.  These channels take structs of type ConnectionCommand or ConnectionParcel
 // (defined below).
 type Connection struct {
-	conn           net.Conn
+	conn           *middle
 	SendChannel    chan interface{} // Send means "towards the network" Channel takes Parcels and ConnectionCommands
-	ReceiveChannel chan interface{} // Recieve means "from the network" Channel sends Parcels and ConnectionCommands
+	ReceiveChannel chan interface{} // Recieve means "from the network" Channel recieves Parcels and ConnectionCommands
 	// and as "address" for sending messages to specific nodes.
 	encoder         *gob.Encoder      // Wire format is gobs in this version, may switch to binary
 	decoder         *gob.Decoder      // Wire format is gobs in this version, may switch to binary
@@ -36,6 +36,30 @@ type Connection struct {
 	isPersistent    bool              // Persistent connections we always redail.
 	notes           string            // Notes about the connection, for debugging (eg: error)
 	metrics         ConnectionMetrics // Metrics about this connection
+}
+
+type middle struct {
+	conn net.Conn
+}
+func (m *middle)Write(b []byte)(int,error){
+	end := 10
+	if end > len(b) {
+		end = len(b)
+	}
+	i,e := m.conn.Write(b)
+	fmt.Printf("bbbb Write %s %d/%d bytes, Data:%x\n",time.Now().String(),len(b),i,b[:end])
+	return i,e
+}
+func (m *middle)Read(b[]byte)(int,error) {
+	i,e := m.conn.Read(b)
+	end := 10
+	if end > len(b) {
+		end = len(b)
+	}
+	if e == nil {
+		fmt.Printf("bbbb Read  %s %d bytes, Data: %x\n", time.Now().String(), len(b), b[:end])
+	}
+	return i,e
 }
 
 // Each connection is a simple state machine.  The state is managed by a single goroutine which also does netowrking.
@@ -110,7 +134,9 @@ const (
 
 // InitWithConn is called from our accept loop when a peer dials into us and we already have a network conn
 func (c *Connection) InitWithConn(conn net.Conn, peer Peer) *Connection {
-	c.conn = conn
+	m := new(middle)
+	c.conn = m
+	m.conn = conn
 	c.isOutGoing = false // InitWithConn is called by controller's accept() loop
 	c.commonInit(peer)
 	c.isPersistent = false
@@ -289,12 +315,15 @@ func (c *Connection) dialLoop() {
 func (c *Connection) dial() bool {
 	address := c.peer.AddressPort()
 	note(c.peer.PeerIdent(), "Connection.dial() dialing: %+v", address)
-	conn, err := net.DialTimeout("tcp", address, time.Second*10)
+	// conn, err := net.Dial("tcp", c.peer.Address)
+	conn, err := net.DialTimeout("tcp", address, time.Second*60)
 	if nil != err {
 		c.setNotes(fmt.Sprintf("Connection.dial(%s) got error: %+v", address, err))
 		return false
 	}
-	c.conn = conn
+	m := new(middle)
+	c.conn = m
+	m.conn = conn
 	c.setNotes(fmt.Sprintf("Connection.dial(%s) was successful.", address))
 	return true
 }
@@ -330,7 +359,7 @@ func (c *Connection) goShutdown() {
 	c.goOffline()
 	c.updatePeer()
 	if nil != c.conn {
-		defer c.conn.Close()
+		defer c.conn.conn.Close()
 	}
 	c.decoder = nil
 	c.encoder = nil
@@ -391,7 +420,7 @@ func (c *Connection) sendParcel(parcel Parcel) {
 	debug(c.peer.PeerIdent(), "sendParcel() sending message to network of type: %s", parcel.MessageType())
 	parcel.Header.NodeID = NodeID // Send it out with our ID for loopback.
 	verbose(c.peer.PeerIdent(), "sendParcel() Sanity check. State: %s Encoder: %+v, Parcel: %s", c.ConnectionState(), c.encoder, parcel.MessageType())
-	c.conn.SetWriteDeadline(time.Now().Add(1000 * time.Millisecond))
+	c.conn.conn.SetWriteDeadline(time.Now().Add(1000 * time.Millisecond))
 	fmt.Printf("                                  sent to network %d   %s\n", parcel.Header.Length  , parcel.MessageType())
 	err := c.encoder.Encode(parcel)
 	switch {
@@ -412,7 +441,7 @@ func (c *Connection) processReceives() {
 	for ConnectionOnline == c.state {
 		var message Parcel
 		verbose(c.peer.PeerIdent(), "Connection.processReceives() called. State: %s", c.ConnectionState())
-		c.conn.SetReadDeadline(time.Now().Add(1000 * time.Millisecond))
+		c.conn.conn.SetReadDeadline(time.Now().Add(1000 * time.Millisecond))
 		err := c.decoder.Decode(&message)
 		switch {
 		case nil == err:
