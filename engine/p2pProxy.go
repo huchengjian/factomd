@@ -209,7 +209,7 @@ func (f *P2PProxy) ManageOutChannel() {
 	for data := range f.BroadcastOut {
 		switch data.(type) {
 		case factomMessage:
-			fmt.Printf("a new message was put into the BroadcastOut channel\n")
+			//fmt.Printf("a new message was put into the BroadcastOut channel\n")
 			fmessage := data.(factomMessage)
 			// Wrap it in a parcel and send it out channel ToNetwork.
 			parcel := p2p.NewParcel(p2p.CurrentNetwork, fmessage.message)

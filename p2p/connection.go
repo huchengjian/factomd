@@ -43,29 +43,30 @@ type middle struct {
 	conn net.Conn
 }
 func (m *middle)Write(b []byte)(int,error){
-	timestart := time.Now()
-	fmt.Printf("bbbb Write %s\n",timestart.String())
-	end := 1000
+	//timestart := time.Now()
+	//fmt.Printf("bbbb Write %s\n",timestart.String())
+	end := 70
 	if end > len(b) {
 		end = len(b)
 	}
 	i,e := m.conn.Write(b)
-	fmt.Printf("bbbb Write %s %d/%d bytes, Data:%x\n",(time.Since(timestart)).String(),len(b),i,b[:end])
+	//fmt.Printf("bbbb Write %s %d/%d bytes, Data:%x\n",(time.Since(timestart)).String(),len(b),i,b[:end])
+	fmt.Printf("bbbb Write %s %d/%d bytes, Data:%x\n",time.Now().String(),len(b),i,b[:end])
 	return i,e
 }
 func (m *middle)Read(b[]byte)(int,error) {
-	timestart := time.Now()
-	fmt.Printf("bbbb Read  %s\n", timestart.String())
+	//timestart := time.Now()
+	//fmt.Printf("bbbb Read  %s\n", timestart.String())
 	i,e := m.conn.Read(b)
 	end := 1000
 	if e != nil {
-		fmt.Print("error in reading from conn ", e, "\n")
+		//fmt.Print("error in reading from conn ", e, "\n")
 	}
 	if end > len(b) {
 		end = len(b)
 	}
 	if e == nil {
-		fmt.Printf("bbbb Read  %s %d bytes, Data: %x\n", (time.Since(timestart)).String(), len(b), b[:end])
+		//fmt.Printf("bbbb Read  %s %d bytes, Data: %x\n", (time.Since(timestart)).String(), len(b), b[:end])
 	}
 	return i,e
 }
@@ -198,7 +199,7 @@ func (c *Connection) commonInit(peer Peer) {
 }
 
 func (c *Connection) Start() {
-	fmt.Printf("started network connection runloop\n")
+	//fmt.Printf("started network connection runloop\n")
 	go c.runLoop()
 }
 
@@ -212,19 +213,19 @@ func (c *Connection) runLoop() {
 		c.connectionStatusReport()
 		switch c.state {
 		case ConnectionInitialized:
-			fmt.Printf("                    in state initialized\n")
+			//fmt.Printf("                    in state initialized\n")
 			if MinumumQualityScore > c.peer.QualityScore && !c.isPersistent {
 				c.setNotes("Connection.runloop(%s) ConnectionInitialized quality score too low: %d", c.peer.PeerIdent(), c.peer.QualityScore)
 				c.updatePeer() // every PeerSaveInterval * 0.90 we send an update peer to the controller.
 				c.goShutdown()
 			} else {
 				c.setNotes("Connection.runLoop() ConnectionInitialized, going dialLoop(). %+v", c.peer.PeerIdent())
-				fmt.Printf("                    start dial loop\n")
+				//fmt.Printf("                    start dial loop\n")
 				c.dialLoop() // dialLoop dials until it connects or shuts down.
-				fmt.Printf("                    finish dial loop\n")
+				//fmt.Printf("                    finish dial loop\n")
 			}
 		case ConnectionOnline:
-			fmt.Printf("                       in state online\n")
+			//fmt.Printf("                       in state online\n")
 			c.processSends()
 			c.processReceives() // We may get messages that change state (Eg: loopback error)
 			if ConnectionOnline == c.state {
@@ -240,7 +241,7 @@ func (c *Connection) runLoop() {
 				c.goShutdown()
 			}
 		case ConnectionOffline:
-			fmt.Printf("                    in state offline\n")
+			//fmt.Printf("                    in state offline\n")
 			switch {
 			case c.isOutGoing:
 				note(c.peer.PeerIdent(), "Connection.runLoop() ConnectionOffline, going dialLoop().")
@@ -249,7 +250,7 @@ func (c *Connection) runLoop() {
 				c.goShutdown()
 			}
 		case ConnectionShuttingDown:
-			fmt.Printf("                    in state shutting down\n")
+			//fmt.Printf("                    in state shutting down\n")
 			note(c.peer.PeerIdent(), "runLoop() in ConnectionShuttingDown state. The runloop() is sending ConnectionCommand{command: ConnectionIsClosed} Notes: %s", c.notes)
 			c.state = ConnectionClosed
 			BlockFreeChannelSend(c.ReceiveChannel, ConnectionCommand{command: ConnectionIsClosed})
@@ -411,11 +412,11 @@ func (c *Connection) goShutdown() {
 // processSends gets all the messages from the application and sends them out over the network
 func (c *Connection) processSends() {
 	// note(c.peer.PeerIdent(), "Connection.processSends() called. Items in send channel: %d State: %s", len(c.SendChannel), c.ConnectionState())
-	fmt.Printf("                          process sends start\n")
+	//fmt.Printf("                          process sends start\n")
 	for 0 < len(c.SendChannel) && ConnectionOnline == c.state {
 		message := <-c.SendChannel
-		fmt.Printf("                          process sends %+v\n", message)
-		fmt.Printf("                          process sendsx %x\n", message)
+		//fmt.Printf("                          process sends %+v\n", message)
+		//fmt.Printf("                          process sendsx %x\n", message)
 		switch message.(type) {
 		case ConnectionParcel:
 			verbose(c.peer.PeerIdent(), "processSends() ConnectionParcel")
@@ -463,7 +464,7 @@ func (c *Connection) sendParcel(parcel Parcel) {
 	parcel.Header.NodeID = NodeID // Send it out with our ID for loopback.
 	verbose(c.peer.PeerIdent(), "sendParcel() Sanity check. State: %s Encoder: %+v, Parcel: %s", c.ConnectionState(), c.encoder, parcel.MessageType())
 	c.conn.conn.SetWriteDeadline(time.Now().Add(1000 * time.Millisecond))
-	fmt.Printf("                                  sent to network %d   %s\n", parcel.Header.Length  , parcel.MessageType())
+	//fmt.Printf("                                  sent to network %d   %s\n", parcel.Header.Length  , parcel.MessageType())
 	err := c.encoder.Encode(parcel)
 	switch {
 	case nil == err:
@@ -492,9 +493,9 @@ func (c *Connection) processReceives() {
 			c.metrics.MessagesReceived += 1
 			message.Header.PeerAddress = c.peer.Address
 			c.handleParcel(message)
-			fmt.Printf("gob decoder got %s %x\n",message.MessageType(), message)
+			//fmt.Printf("gob decoder got %s %x\n",message.MessageType(), message)
 		default:
-			fmt.Printf("gob decoder had an error %v\n", err)
+			//fmt.Printf("gob decoder had an error %v\n", err)
 			c.handleNetErrors(err)
 			return
 		}
