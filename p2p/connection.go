@@ -12,7 +12,7 @@ import (
 	"net"
 	"syscall"
 	"time"
-	
+
 )
 
 // Connection represents a single connection to another peer over the network. It communicates with the application
@@ -324,11 +324,45 @@ func (c *Connection) dial() bool {
 	address := c.peer.AddressPort()
 	note(c.peer.PeerIdent(), "Connection.dial() dialing: %+v", address)
 	// conn, err := net.Dial("tcp", c.peer.Address)
-	conn, err := net.DialTimeout("tcp", address, time.Second*60)
+	conn2, err := net.DialTimeout("tcp", address, time.Second*60)
+
+	/*conn, err := Dial: (&net.Dialer{
+                Timeout:   30 * time.Second,
+                KeepAlive: 30 * time.Second,
+        }).DialTimeout("tcp", address, time.Second*60)
+	*/
+
+
+	/*
+	(&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: time.Minute,
+		})*/
+
+
+
+
+
+	//conn.Dialer.KeepAlive = true
 	if nil != err {
 		c.setNotes(fmt.Sprintf("Connection.dial(%s) got error: %+v", address, err))
 		return false
 	}
+	conn, ok := conn2.(*net.TCPConn)
+	if !ok {
+		fmt.Printf("Bad connection type: %T", c)
+		return false
+	}
+
+	if err := conn.SetNoDelay(true); err != nil {
+		fmt.Printf("error, nodelay didn't take")
+		return false
+	}/*
+	if err := conn.SetKeepAlive(true); err != nil {
+		fmt.Printf("error, keepalive didn't take")
+		return false
+	}*/
+
 	m := new(middle)
 	c.conn = m
 	m.conn = conn
@@ -458,7 +492,9 @@ func (c *Connection) processReceives() {
 			c.metrics.MessagesReceived += 1
 			message.Header.PeerAddress = c.peer.Address
 			c.handleParcel(message)
+			fmt.Printf("gob decoder got %s %x\n",message.MessageType(), message)
 		default:
+			fmt.Printf("gob decoder had an error %v\n", err)
 			c.handleNetErrors(err)
 			return
 		}
