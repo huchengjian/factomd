@@ -58,6 +58,9 @@ func (m *middle)Read(b[]byte)(int,error) {
 	fmt.Printf("bbbb Read  %s\n", timestart.String())
 	i,e := m.conn.Read(b)
 	end := 1000
+	if e != nil {
+		fmt.Print("error in reading from conn ", e, "\n")
+	}
 	if end > len(b) {
 		end = len(b)
 	}
