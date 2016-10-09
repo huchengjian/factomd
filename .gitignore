@@ -23,6 +23,7 @@ _test
 bin
 pkg
 .vagrant
+vendor/
 
 # Architecture specific extensions/prefixes
 *.[568vq]
